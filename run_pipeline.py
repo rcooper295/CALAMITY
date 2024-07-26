@@ -2,6 +2,7 @@ from astropy.io import fits
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline
 import argparse
 import os
+import time
 
 from jwst.ami import AmiAnalyzeStep, AmiNormalizeStep
 
@@ -13,8 +14,8 @@ from jwst.ami import AmiAnalyzeStep, AmiNormalizeStep
 # but then the amimulti and amilg products wouldn't be saved.
 
 
-
 def run_detector1(files, outdir):
+	toc = time.time()
 	if not os.path.exists(outdir):
 		os.makedirs(outdir)
 	if files[0].split("_")[-1] != 'uncal.fits':
@@ -32,8 +33,11 @@ def run_detector1(files, outdir):
 		result1.save_calibrated_ramp = True
 		result1.output_dir = outdir
 		result1.run(fn)
+	tic = time.time()
+	print("Detector1 runtime: %.3f s" % (tic - toc))
 
 def run_image2(files, outdir):
+	toc = time.time()
 	if not os.path.exists(outdir):
 		os.makedirs(outdir)
 	if files[0].split("_")[-1] != 'rateints.fits':
@@ -47,14 +51,21 @@ def run_image2(files, outdir):
 		result2.save_results = True
 		result2.output_dir = outdir
 		result2.run(fn)
+	tic = time.time()
+	print("Image2 runtime: %.3f s" % (tic - toc))
 
 def run_ami3(files, outdir, calib_pairs=None):
+	toc = time.time()
 	if not os.path.exists(outdir):
 		os.makedirs(outdir)
 	if files[0].split("_")[-1] != 'calints.fits':
 		# replace whatever the suffix is with calints
 		files = replace_suffix(files, 'calints.fits', newdir=outdir)
 	for fn in files:
+		# skip TA files
+		hdr = fits.getheader(fn)
+		if hdr['EXP_TYPE'] != 'NIS_AMI':
+			continue
 		analyze = AmiAnalyzeStep()
 		analyze.save_results = True
 		analyze.firstfew = None
@@ -78,7 +89,8 @@ def run_ami3(files, outdir, calib_pairs=None):
 		normalize.output_dir = outdir
 		normalize.save_results = True
 		normalize.run(targoi,caloi)
-
+	tic = time.time()
+	print("Ami3 runtime: %.3f s" % (tic - toc))
 def make_pairs(files):
 	# calibrator exposures should have "is_psf" True in header
 	# matched by filter, dither position
@@ -88,7 +100,7 @@ def make_pairs(files):
 	keywords = ['FILTER','IS_PSF','PATT_NUM','NUMDTHPT']
 	for fn in files:
 		hdr = fits.getheader(fn)
-		if hdr['EXP_TYPE'] == 'NIS_TACQ':
+		if hdr['EXP_TYPE'] != 'NIS_AMI':
 			continue
 		filedict[fn] = {}
 		for keyw in keywords:
@@ -97,6 +109,8 @@ def make_pairs(files):
 	for fn1 in files:
 		if filedict[fn1]['IS_PSF'] is False:
 			for fn2 in files:
+				if hdr['EXP_TYPE'] != 'NIS_AMI':
+					continue
 				if ((filedict[fn2]['IS_PSF'] is True) &
 					(filedict[fn2]['FILTER'] == filedict[fn1]['FILTER']) & 
 					(filedict[fn2]['PATT_NUM'] == filedict[fn1]['PATT_NUM']) & 
@@ -124,20 +138,22 @@ def replace_suffix(files, newsuffix, newdir=None):
 	return newfiles
 
 def run_all(files, outdir, calib_pairs=None):
+	bigtoc = time.time()
 	run_detector1(files, outdir)
 	# save all outputs to the same directory; becomes input for following stages
 	#rateints = [os.path.join(outdir, os.path.basename(fn).replace('uncal','rateints')) for fn in files]
 	run_image2(files, outdir)
 	#calints = [os.path.join(outdir, os.path.basename(fn).replace('uncal','calints')) for fn in files]
 	run_ami3(files, outdir, calib_pairs=calib_pairs)
-
+	bigtic = time.time()
+	print("Full runtime: %.3f s" % (bigtic - bigtoc))
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument("files", nargs='+', help="List of files to process")
 	parser.add_argument("outdir", help="Directory to save output files")
 	parser.add_argument("--calib_pairs", default=None, help="YAML file of calibration pairs, not yet implemented")
-	parser.add_argument("--stages", nargs='+',action='store', type=str, help="Which pipeline stages to run (1, 2, 3). Default is to run all.")
+	parser.add_argument("--stages", nargs='+',action='store', type=str, help="Which pipeline stages to run (1 2 3). Default is to run all.")
 	args = parser.parse_args()
 
 	if args.stages:
@@ -156,5 +172,3 @@ if __name__ == "__main__":
 	else:
 		print('Going to run all stages')
 		run_all(args.files, args.outdir, calib_pairs=args.calib_pairs)
-
-
