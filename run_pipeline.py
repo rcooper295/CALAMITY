@@ -26,15 +26,17 @@ def run_detector1(files, outdir, skipdark=True):
 		if os.path.exists(outpred):
 			print('File already exists, not re-running')
 			continue
-		result1 = Detector1Pipeline()
-		result1.ipc.skip = True
-		if skipdark:
-			result1.dark.skip = True
-		result1.persistence.skip = True
-		result1.save_results = True
-		result1.save_calibrated_ramp = True
-		result1.output_dir = outdir
-		result1.run(fn)
+
+		stepdict = {"ipc": {"skip": True},
+                    "persistence": {"skip": True},
+                    "dark_current": {"skip": skipdark}}
+		Detector1Pipeline.call(fn,
+                                steps=stepdict,
+                                save_results=True,
+                                save_calibrated_ramp = True,
+                               output_dir = outdir)
+
+
 	tic = time.time()
 	print("Detector1 runtime: %.3f s" % (tic - toc))
 
