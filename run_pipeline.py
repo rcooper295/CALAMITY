@@ -14,7 +14,7 @@ from jwst.ami import AmiAnalyzeStep, AmiNormalizeStep
 # but then the amimulti and amilg products wouldn't be saved.
 
 
-def run_detector1(files, outdir):
+def run_detector1(files, outdir, skipdark=True):
 	toc = time.time()
 	if not os.path.exists(outdir):
 		os.makedirs(outdir)
@@ -28,6 +28,8 @@ def run_detector1(files, outdir):
 			continue
 		result1 = Detector1Pipeline()
 		result1.ipc.skip = True
+		if skipdark:
+			result1.dark.skip = True
 		result1.persistence.skip = True
 		result1.save_results = True
 		result1.save_calibrated_ramp = True
